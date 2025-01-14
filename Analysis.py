@@ -2,10 +2,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.stattools import adfuller
-from sklearn.metrics import mean_squared_error
-import numpy as np
 
 # Set Streamlit title
 st.title('Data Visualization and Analysis')
@@ -23,6 +19,7 @@ data = pd.read_csv(file_path_filtered)
 st.header('Filter District Data')
 district_names = ['Jelebu', 'Kuala Pilah', 'Jempol', 'Port Dickson', 'Rembau', 'Tampin', 'Seremban']
 df_newdist = df_dist[df_dist['district'].isin(district_names)]
+
 df_newincome = df_income[df_income['district'].isin(district_names)]
 
 # Display filtered data
@@ -59,97 +56,30 @@ sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', ax=ax_heatmap)
 ax_heatmap.set_title('Correlation Matrix')
 st.pyplot(fig_heatmap)
 
-# ARIMA Model - Price Forecasting
-st.header('Price Forecasting with ARIMA')
-
-# Ensure the date column is in datetime format
+# Line chart: 12-Month Average Price
+st.header('12-Month Average Price Over Time')
 data['date'] = pd.to_datetime(data['date'])
+data.set_index('date', inplace=True)
+monthly_avg = data['price'].resample('M').mean()
+monthly_avg_12_month = monthly_avg.rolling(window=12).mean()
 
-# Initialize variables
-overall_rmse = []
-forecast_results = []
+fig_line, ax_line = plt.subplots(figsize=(12, 6))
+ax_line.plot(monthly_avg.index, monthly_avg_12_month, marker='o', color='red', label='12-Month Average Price')
+ax_line.set_title('12-Month Average Price Over Time')
+ax_line.set_xlabel('Date')
+ax_line.set_ylabel('Average Price (RM)')
+ax_line.legend(loc='best')
+plt.xticks(rotation=45)
+st.pyplot(fig_line)
 
-# List of item codes to predict
-item_codes = [1, 2, 3]
+# Heatmap: Average price by premise and month
+st.header('Average Price Heatmap by Premise and Month')
+data = data.reset_index()
+data['month'] = data['date'].dt.to_period('M')
+monthly_avg_price = data.groupby(['premise', 'month'])['price'].mean().reset_index()
+heatmap_data = monthly_avg_price.pivot_table(index='premise', columns='month', values='price')
 
-# Loop through each item_code
-for code in item_codes:
-    st.subheader(f"Processing item_code: {code}")
-
-    # Filter data for the current item_code
-    item_data = data[data['item_code'] == code]
-
-    # Set the date as the index and sort by date
-    item_data = item_data.set_index('date').sort_index()
-
-    # Aggregate data by weekly average for better clarity
-    item_data = item_data[['price']].resample('W').mean()
-
-    # Extract the price column
-    price_data = item_data['price']
-
-    # Check for stationarity
-    adf_test = adfuller(price_data.dropna())
-    st.write(f'ADF Statistic for item_code {code}:', adf_test[0])
-    st.write(f'p-value for item_code {code}:', adf_test[1])
-
-    # Difference the data if non-stationary
-    if adf_test[1] > 0.05:
-        price_data_diff = price_data.diff().dropna()
-    else:
-        price_data_diff = price_data
-
-    # Fit ARIMA model
-    model = ARIMA(price_data, order=(1, 1, 1))  # Example ARIMA(1, 1, 1)
-    model_fit = model.fit()
-
-    # Forecast future prices
-    forecast_steps = 30  # Predict for the next 30 weeks
-    forecast = model_fit.get_forecast(steps=forecast_steps)
-    forecast_index = pd.date_range(price_data.index[-1], periods=forecast_steps + 1, freq='W')[1:]
-    forecast_mean = forecast.predicted_mean
-    forecast_ci = forecast.conf_int()
-
-    # Store results for visualization
-    forecast_results.append({
-        'item_code': code,
-        'observed': price_data,
-        'forecast_index': forecast_index,
-        'forecast_mean': forecast_mean,
-        'forecast_ci': forecast_ci,
-    })
-
-    # Evaluate model using RMSE
-    train_size = int(len(price_data) * 0.8)
-    train, test = price_data[:train_size], price_data[train_size:]
-    model = ARIMA(train, order=(1, 1, 1))
-    model_fit = model.fit()
-    forecast_test = model_fit.forecast(steps=len(test))
-
-    test = test.dropna()
-    forecast_test = forecast_test[:len(test)]  # Align forecast with test index
-
-    rmse = np.sqrt(mean_squared_error(test, forecast_test))
-    overall_rmse.append(rmse)
-    st.write(f'Test RMSE for item_code {code}:', rmse)
-
-# Compute overall RMSE
-average_rmse = np.mean(overall_rmse)
-st.write("\nOverall RMSE:", average_rmse)
-
-# Visualization of all forecasts combined
-fig_forecast, ax_forecast = plt.subplots(figsize=(14, 8))
-
-for result in forecast_results:
-    ax_forecast.plot(result['observed'], label=f'Observed (item_code {result["item_code"]})', alpha=0.7)
-    ax_forecast.plot(result['forecast_index'], result['forecast_mean'], label=f'Forecast (item_code {result["item_code"]})', linestyle='--')
-
-    # Add confidence interval shading
-    ax_forecast.fill_between(result['forecast_index'], result['forecast_ci'].iloc[:, 0], result['forecast_ci'].iloc[:, 1], alpha=0.2)
-
-ax_forecast.set_title("Price Forecast for All Item Codes (Weekly Averaged Data)")
-ax_forecast.set_xlabel("Date")
-ax_forecast.set_ylabel("Price")
-ax_forecast.legend()
-ax_forecast.grid(True)
-st.pyplot(fig_forecast)
+fig_heatmap2, ax_heatmap2 = plt.subplots(figsize=(12, 8))
+sns.heatmap(heatmap_data, cmap='YlGnBu', annot=True, fmt=".2f", ax=ax_heatmap2)
+ax_heatmap2.set_title('Average Price Heatmap by Premise and Month')
+st.pyplot(fig_heatmap2)
