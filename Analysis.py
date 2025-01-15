@@ -56,6 +56,26 @@ sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', ax=ax_heatmap)
 ax_heatmap.set_title('Correlation Matrix')
 st.pyplot(fig_heatmap)
 
+# Line chart: 12-Month Average Price Over Time
+st.header('12-Month Average Price Over Time')
+data['date'] = pd.to_datetime(data['date'])
+data.set_index('date', inplace=True)
+monthly_avg = data['price'].resample('M').mean()
+monthly_avg_12_month = monthly_avg.rolling(window=12).mean()
+
+# Filter the data to include only from October 2023 to October 2024
+start_date = '2023-10-01'
+end_date = '2024-10-31'
+monthly_avg_12_month = monthly_avg_12_month[start_date:end_date]
+
+fig_line, ax_line = plt.subplots(figsize=(12, 6))
+ax_line.plot(monthly_avg_12_month.index, monthly_avg_12_month, marker='o', color='red', label='12-Month Average Price')
+ax_line.set_title('12-Month Average Price Over Time')
+ax_line.set_xlabel('Date')
+ax_line.set_ylabel('Average Price (RM)')
+ax_line.legend(loc='best')
+plt.xticks(rotation=45)
+st.pyplot(fig_line)
 
 
 
